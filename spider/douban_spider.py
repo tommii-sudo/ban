@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import yaml
 import time
 import csv
+import requests
 from yaml import load, dump
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
@@ -47,16 +48,23 @@ class DoubanDriver:
 
         self.driver = WebDriver()
         self.browser = self.driver.browser
+    
+    
+    def visit(self, url, text = None):
+        if (text is None):
+            self.driver.visit(url, u"关于豆瓣")
+        else:
+            self.driver.visit(url, text)
 
     def login(self):
         if (not self.loginDone):
             print("\n-- try login, wait")
-            self.driver.visit(self.url, u"我的豆瓣")
+            self.visit(self.url, u"我的豆瓣")
         self.loginDone = True
 
     
     def isUserValid(self, url):
-        self.driver.visit(url, u"关于豆瓣")
+        self.visit(url, u"关于豆瓣")
         valid = self.browser.is_text_present(u"广播")
         return valid
 
@@ -69,15 +77,10 @@ class DoubanDriver:
 
 
     def isGroupValid(self, url):
-        self.driver.visit(url, u"关于豆瓣")
+        self.visit(url, u"关于豆瓣")
         valid = self.browser.is_text_present(u"最近讨论")
         return valid
 
-    def visit(self, url, text = None):
-        if (text is None):
-            self.driver.visit(url, u"关于豆瓣")
-        else:
-            self.driver.visit(url, text)
 
 
     def parseUser(self, html):
@@ -90,6 +93,12 @@ class DoubanDriver:
     def findLink(self, text):
         b = self.browser.find_link_by_partial_text(text)
         return len(b) > 0
+
+    def findLinkText(self,html, text):
+        soup = BeautifulSoup(html,features="html.parser")
+        links = soup.find_all("a", text=re.compile(text))
+        return links
+
 
 
     def getContactList(self, start = 0):
@@ -120,8 +129,10 @@ class DoubanDriver:
 
             return
 
+        time.sleep(0.01)
         b = self.browser.find_by_xpath('//div[@class="more-opt"]')
-        if(len(b) == 0):
+        b2 = self.browser.find_by_xpath('//a[@class="a-btn-opt "]')
+        if(len(b) == 0 and len(b2) == 0):
             print(user_url, " no block button")
 
             return
@@ -129,10 +140,14 @@ class DoubanDriver:
             print(user_url, " is friend")
             return
 
+        if(len(b) == 1):
+           b[0].click()
+        else:
+           b2[0].click()
 
-
-        b[0].click()
         time.sleep(0.05)
+
+
         bb = self.browser.find_by_id("add-to-blacklist")
         bb[0].click()
         time.sleep(0.051)
@@ -147,6 +162,12 @@ class DoubanDriver:
             alert.accept() # click ok
             # alert.dismiss() # click cancel
             print(user_url, " block ok")
+            #wait redirect
+            
+            b = self.browser.find_by_xpath('//a[@id="ban-cancel"]')
+            while(len(b) == 0):
+                time.sleep(0.01)
+                b = self.browser.find_by_xpath('//a[@id="ban-cancel"]')
             return
             
         print(user_url, " block fail")
@@ -166,26 +187,37 @@ class DoubanDriver:
 
 
     def getMember(self, url, start = 0 ):
+        print("index ", start)
         start_url = url + str(start)
 
-        self.visit(start_url)
-        html = self.driver.html
+        # self.visit(start_url)
+        # html = self.driver.html
+
+        content = requests.get(start_url)
+        if(not content.ok):
+            print(start_url, " not valid")
+
+            return
+        html = content.content
         people_list = self.parseUser(html)
         self.member_list = self.member_list.union(people_list)
 
         # check next page
-        if(self.findLink(u"后页")):
+        if(len(self.findLinkText(html,u"后页")) > 0):
             self.getMember(url, start + self.members_page_step)
 
 
     def scanGroup(self, url):
-        if(not self.isGroupValid(url)):
-            print(url, "is not valid")
+        content = requests.get(url)
+        if(not content.ok):
+            print(url, " not valid")
             return
-        
-        self.getMember(self.browser.url + "members?start=")
+
+        url = content.url.strip("/")
+        self.getMember(url + "/members?start=")
 
     def getGroupMembers(self, group_list):
+        print("getGroupMembers: ", group_list)
         self.group_list = group_list
 
         self.members_page_step = 35
