@@ -1,10 +1,9 @@
-
+import sys,os
 from splinter import Browser
 import argparse
 import re
 from bs4 import BeautifulSoup
 import yaml
-import os
 import time
 import csv
 from yaml import load, dump
@@ -13,11 +12,12 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
+ 	
 
 
 class WebDriver():
     def __init__(self):
-        self.browser = Browser('chrome',user_agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:66.0)")
+        self.browser = Browser('chrome', user_agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:66.0)")
 
     def visit(self, url, text = None):
         print("loading " , url)
@@ -54,10 +54,19 @@ class DoubanDriver:
             self.driver.visit(self.url, u"我的豆瓣")
         self.loginDone = True
 
+    
     def isUserValid(self, url):
         self.driver.visit(url, u"关于豆瓣")
         valid = self.browser.is_text_present(u"广播")
         return valid
+
+    def isFriend(self):
+        
+        bb = self.browser.find_by_id('follow-cancel')
+        return len(bb)>0
+
+
+
 
     def isGroupValid(self, url):
         self.driver.visit(url, u"关于豆瓣")
@@ -104,12 +113,23 @@ class DoubanDriver:
 
         
     def blockUser(self, user_url):
+        print("--- blockUser: " , user_url)
+    
         if(not self.isUserValid(user_url)):
+            print(user_url, " is invalid")
+
             return
 
-        b = self.browser.find_by_xpath("/html/body/div[3]/div[1]/div/div[2]/div[1]/div/div[2]/div[2]/div[2]/a")
+        b = self.browser.find_by_xpath('//div[@class="more-opt"]')
         if(len(b) == 0):
+            print(user_url, " no block button")
+
             return
+        if(self.isFriend()):
+            print(user_url, " is friend")
+            return
+
+
 
         b[0].click()
         time.sleep(0.05)
@@ -124,8 +144,14 @@ class DoubanDriver:
 
         if(not alert is None):
             print(alert.text)
-            # alert.accept() # click ok
-            alert.dismiss() # click cancel
+            alert.accept() # click ok
+            # alert.dismiss() # click cancel
+            print(user_url, " block ok")
+            return
+            
+        print(user_url, " block fail")
+        
+
 
 
         
