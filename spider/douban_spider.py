@@ -17,7 +17,7 @@ except ImportError:
 
 class WebDriver():
     def __init__(self):
-        self.browser = Browser(user_agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:66.0)")
+        self.browser = Browser('chrome',user_agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:66.0)")
 
     def visit(self, url, text = None):
         print("loading " , url)
