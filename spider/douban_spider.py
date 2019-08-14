@@ -7,6 +7,10 @@ import yaml
 import time
 import csv
 import requests
+import asyncio
+import concurrent.futures
+
+
 from yaml import load, dump
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
@@ -14,10 +18,11 @@ except ImportError:
     from yaml import Loader, Dumper
 
  	
-
+import threading
+import multiprocessing
 
 class WebDriver():
-    def __init__(self):
+    def __init__(self, browser_type = 'chrome'):
         self.browser = Browser('chrome', user_agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:66.0)")
 
     def visit(self, url, text = None):
@@ -46,9 +51,15 @@ class DoubanDriver:
         self.contacts_list = set()
         self.contacts_page_step = 20
 
-        self.driver = WebDriver()
-        self.browser = self.driver.browser
+        self.driver = None
+        self.browser = None
+
+        # Build a pipe
+        self.pipe = multiprocessing.Pipe()
     
+    def createBrowser(self, browser_type = 'chrome'):
+        self.driver = WebDriver(browser_type)
+        self.browser = self.driver.browser
     
     def visit(self, url, text = None):
         if (text is None):
@@ -173,6 +184,16 @@ class DoubanDriver:
         print(user_url, " block fail")
         
 
+    def blockUserProcess(self):
+        pipe_recv = self.pipe[1]
+        while True:
+            url_list = pipe_recv.recv()
+            for url in url_list:
+                self.blockUser(url)
+
+            time.sleep(0.1)
+
+        pass
 
 
         
@@ -192,8 +213,18 @@ class DoubanDriver:
 
         # self.visit(start_url)
         # html = self.driver.html
-
         content = requests.get(start_url)
+
+        # loop = asyncio.get_event_loop()
+        # content = await loop.run_in_executor(None, requests.get, start_url)
+            
+        # 2. Run in a custom thread pool:
+        # content = None
+        # with concurrent.futures.ThreadPoolExecutor() as pool:
+        #     content = await loop.run_in_executor(
+        #         pool, requests.get, start_url)
+
+
         if(not content.ok):
             print(start_url, " not valid")
 
@@ -202,9 +233,7 @@ class DoubanDriver:
         people_list = self.parseUser(html)
         self.member_list = self.member_list.union(people_list)
 
-        # check next page
-        if(len(self.findLinkText(html,u"后页")) > 0):
-            self.getMember(url, start + self.members_page_step)
+
 
 
     def scanGroup(self, url):
@@ -212,9 +241,32 @@ class DoubanDriver:
         if(not content.ok):
             print(url, " not valid")
             return
-
         url = content.url.strip("/")
-        self.getMember(url + "/members?start=")
+
+        # get member number
+        soup = BeautifulSoup(content.content,features="html.parser")
+        
+        p = soup.find_all("a", href=re.compile(url +"/members"))
+        num = 0
+        if(len(p)>0):
+            p0 = p[0]
+            s = re.search("(\d+)",p0.text)
+            if (not s is None):
+                num = int(s.group(0))
+                print(url, "member number: " , num)
+        
+        if (num >0):
+            loop = asyncio.get_event_loop()
+            # 创建一个事件循环
+            p = concurrent.futures.ThreadPoolExecutor(5)
+            # 创建一个线程池，开启5个线程
+            tasks = [loop.run_in_executor(p,self.getMember, url + "/members?start=", i)for i in range(0, num, self.members_page_step)]
+            loop.run_until_complete(asyncio.wait(tasks))
+            return
+            for i in range(0, num, self.members_page_step):
+                self.getMember(url + "/members?start=", i)
+                # with concurrent.futures.ProcessPoolExecutor() as pool:
+                #     await loop.run_in_executor(pool, self.getMember, url + "/members?start=", i)
 
     def getGroupMembers(self, group_list):
         print("getGroupMembers: ", group_list)
@@ -222,8 +274,10 @@ class DoubanDriver:
 
         self.members_page_step = 35
         self.member_list = set()
+        loop = asyncio.get_event_loop()
 
         for g in self.group_list:
+            # loop.run_until_complete(self.scanGroup(g))
             self.scanGroup(g)
 
     def dump(self):
