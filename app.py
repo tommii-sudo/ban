@@ -12,12 +12,18 @@ if (__name__ == "__main__"):
     group_list = yaml.load(stream,Loader=Loader)
 
     douban = DoubanDriver()
+
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(douban.getGroupMembers(group_list))
+    douban.getGroupMembers(group_list)
+    print(len(douban.member_list))
+    douban.createBrowser()
+
     douban.login()
 
-    douban.getGroupMembers(group_list)
 
     # test part of list
-    # douban.member_list = set(list(douban.member_list)[:3])
+    douban.member_list = set(list(douban.member_list)[:3])
     douban.blockUserList(douban.member_list)
 
 
