@@ -1,3 +1,4 @@
+
 from spider.douban_spider import *
 
 if (__name__ == "__main__"):
@@ -11,12 +12,12 @@ if (__name__ == "__main__"):
     group_list = yaml.load(stream,Loader=Loader)
 
     douban = DoubanDriver()
-    douban.getContactList()
+    douban.login()
 
     douban.getGroupMembers(group_list)
 
     # test part of list
-    douban.member_list = set(list(douban.member_list)[:3])
+    # douban.member_list = set(list(douban.member_list)[:3])
     douban.blockUserList(douban.member_list)
 
 
